@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMG→A4·PDF — 图片批量转 A4 PDF 打印工具</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  /* ===== 国际主义风格 (Swiss Style) ===== */
+  :root{
+    --ink:#111111;
+    --paper:#ffffff;
+    --grey:#8a8a8a;
+    --line:#e2e2e2;
+    --accent:#e3002b; /* 国际主义经典红 */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    font-family:"Helvetica Neue",Helvetica,Arial,"Inter","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    font-size:16px;
+    line-height:1.5;
+    text-align:left;
+  }
+
+  /* ===== 顶栏 ===== */
+  header{
+    display:grid;
+    grid-template-columns:1fr auto;
+    align-items:end;
+    padding:32px 48px 24px;
+    border-bottom:4px solid var(--ink);
+  }
+  header h1{
+    font-size:44px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+    line-height:1;
+  }
+  header h1 span{color:var(--accent);}
+  header .meta{
+    font-size:12px;
+    color:var(--grey);
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    text-align:right;
+  }
+
+  /* ===== 主网格 ===== */
+  main{
+    display:grid;
+    grid-template-columns:360px 1fr;
+    min-height:calc(100vh - 120px);
+  }
+
+  /* 左侧控制面板 */
+  aside{
+    border-right:1px solid var(--line);
+    padding:32px;
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+  }
+  .section-label{
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.15em;
+    color:var(--grey);
+    border-bottom:1px solid var(--ink);
+    padding-bottom:6px;
+    margin-bottom:12px;
+  }
+
+  /* 上传区 */
+  #dropzone{
+    border:2px solid var(--ink);
+    padding:40px 24px;
+    text-align:left;
+    cursor:pointer;
+    transition:background .15s,color .15s;
+    user-select:none;
+  }
+  #dropzone:hover,#dropzone.dragover{
+    background:var(--ink);
+    color:var(--paper);
+  }
+  #dropzone .big{font-size:20px;font-weight:700;}
+  #dropzone .small{font-size:12px;color:inherit;opacity:.65;margin-top:8px;}
+
+  /* 模式选择 */
+  .radio-row{display:flex;gap:0;border:1px solid var(--ink);}
+  .radio-row label{
+    flex:1;padding:10px 0;font-size:13px;font-weight:600;text-align:center;
+    cursor:pointer;border-right:1px solid var(--ink);
+  }
+  .radio-row label:last-child{border-right:none;}
+  .radio-row input{display:none;}
+  .radio-row label:has(input:checked){background:var(--ink);color:var(--paper);}
+
+  /* 按钮 */
+  button{
+    font-family:inherit;
+    border:2px solid var(--ink);
+    background:var(--paper);
+    color:var(--ink);
+    font-size:15px;
+    font-weight:700;
+    padding:14px 20px;
+    cursor:pointer;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    transition:background .15s,color .15s;
+  }
+  button:hover:not(:disabled){background:var(--ink);color:var(--paper);}
+  button:disabled{opacity:.25;cursor:not-allowed;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--paper);}
+  button.primary:hover:not(:disabled){background:var(--ink);border-color:var(--ink);}
+
+  /* 进度条 */
+  #progress-wrap{display:none;}
+  #progress-track{height:8px;background:var(--line);}
+  #progress-bar{height:100%;width:0%;background:var(--accent);transition:width .2s;}
+  #progress-text{font-size:12px;color:var(--grey);margin-top:6px;}
+
+  /* 统计 */
+  #stats{font-size:13px;color:var(--grey);}
+
+  /* 右侧预览网格 */
+  #gallery{
+    padding:32px;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+    gap:24px;
+    align-content:start;
+  }
+  #empty-hint{
+    grid-column:1/-1;
+    color:var(--grey);
+    font-size:14px;
+    padding:64px 0;
+    border:1px dashed var(--line);
+    text-align:center;
+  }
+
+  .card{
+    border:1px solid var(--line);
+    background:var(--paper);
+    position:relative;
+  }
+  .card .idx{
+    position:absolute;top:0;left:0;
+    background:var(--ink);color:var(--paper);
+    font-size:11px;font-weight:700;
+    padding:2px 8px;
+    z-index:2;
+  }
+  .card .thumb{
+    width:100%;aspect-ratio:210/297;
+    object-fit:cover;
+    display:block;
+    background:#f5f5f5;
+  }
+  .card .name{
+    font-size:11px;color:var(--grey);
+    padding:6px 8px 2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .card .ops{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--line);
+  }
+  .card .ops button{
+    border:none;border-right:1px solid var(--line);
+    padding:6px 0;font-size:14px;letter-spacing:0;
+    background:var(--paper);
+  }
+  .card .ops button:last-child{border-right:none;}
+  .card .ops button:hover{background:var(--ink);color:var(--paper);}
+  .card .ops button.del:hover{background:var(--accent);}
+
+  /* 底部说明 */
+  footer{
+    border-top:1px solid var(--line);
+    padding:16px 48px;
+    font-size:11px;color:var(--grey);
+    display:grid;grid-template-columns:1fr auto auto;gap:32px;
+    align-items:center;
+    text-transform:uppercase;letter-spacing:0.1em;
+  }
+  .oss-links{display:flex;gap:16px;}
+  .oss-links a{
+    color:var(--ink);text-decoration:none;font-weight:700;
+    border-bottom:2px solid var(--accent);padding-bottom:1px;
+  }
+  .oss-links a:hover{color:var(--accent);}
+
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;}
+    aside{border-right:none;border-bottom:1px solid var(--line);}
+    header{padding:24px;}
+    header h1{font-size:32px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IMG<span>→</span>A4<span>·</span>PDF</h1>
+  <div class="meta">Batch Image to A4 PDF<br>210 × 297 mm · 300 DPI</div>
+</header>
+
+<main>
+  <aside>
+    <div>
+      <div class="section-label">01 / 上传图片</div>
+      <div id="dropzone">
+        <div class="big">点击选择 或 拖入图片</div>
+        <div class="small">支持 JPG / PNG / BMP / WebP，可多选批量上传</div>
+      </div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden>
+    </div>
+
+    <div>
+      <div class="section-label">02 / 填充模式</div>
+      <div class="radio-row">
+        <label><input type="radio" name="mode" value="stretch" checked><span>拉伸铺满</span></label>
+        <label><input type="radio" name="mode" value="fit"><span>等比留白</span></label>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">03 / 导出</div>
+      <button class="primary" id="btn-export" disabled style="width:100%">生成 PDF</button>
+      <div id="progress-wrap" style="margin-top:16px">
+        <div id="progress-track"><div id="progress-bar"></div></div>
+        <div id="progress-text">处理中…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">状态</div>
+      <div id="stats">未加载图片</div>
+    </div>
+  </aside>
+
+  <section id="gallery">
+    <div id="empty-hint">暂无图片 — 从左侧上传，每张图片将生成一页 A4 PDF</div>
+  </section>
+</main>
+
+<footer>
+  <div>All processing is local — no upload to server</div>
+  <div class="oss-links">
+    <a href="https://github.com/IIIStudio/IMG-A4-PDF" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://cnb.cool/IIIStudio/Code/HTML/IMG-A4-PDF" target="_blank" rel="noopener">CNB</a>
+  </div>
+  <div>Swiss Style · Grid · Helvetica</div>
+</footer>
+
+<script>
+(function(){
+  const { jsPDF } = window.jspdf;
+  const A4_W = 210, A4_H = 297; // mm
+
+  const dropzone   = document.getElementById('dropzone');
+  const fileInput  = document.getElementById('file-input');
+  const gallery    = document.getElementById('gallery');
+  const emptyHint  = document.getElementById('empty-hint');
+  const btnExport  = document.getElementById('btn-export');
+  const stats      = document.getElementById('stats');
+  const progWrap   = document.getElementById('progress-wrap');
+  const progBar    = document.getElementById('progress-bar');
+  const progText   = document.getElementById('progress-text');
+
+  let images = []; // {id, name, dataUrl, width, height}
+
+  /* ---------- 上传 ---------- */
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { addFiles(e.target.files); fileInput.value=''; });
+
+  ['dragenter','dragover'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('dragover'); }));
+  dropzone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+  function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    if(!files.length) return;
+    let pending = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          images.push({
+            id: Date.now() + Math.random().toString(36).slice(2),
+            name: file.name,
+            dataUrl: reader.result,
+            width: img.width,
+            height: img.height
+          });
+          if(--pending === 0) render();
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ---------- 渲染列表 ---------- */
+  function render(){
+    gallery.querySelectorAll('.card').forEach(c => c.remove());
+    emptyHint.style.display = images.length ? 'none' : '';
+    btnExport.disabled = !images.length;
+    stats.textContent = images.length
+      ? `共 ${images.length} 张图片 → ${images.length} 页 A4`
+      : '未加载图片';
+
+    images.forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="idx">${String(i+1).padStart(2,'0')}</div>
+        <img class="thumb" src="${item.dataUrl}" alt="">
+        <div class="name" title="${item.name}">${item.name}</div>
+        <div class="ops">
+          <button data-act="left"  title="上移">←</button>
+          <button data-act="right" title="下移">→</button>
+          <button data-act="rotate" title="旋转90°">⟳</button>
+          <button data-act="del" class="del" title="删除">×</button>
+        </div>`;
+      card.querySelector('.ops').addEventListener('click', e => {
+        const act = e.target.dataset.act;
+        if(!act) return;
+        if(act==='del') images.splice(i,1);
+        if(act==='left'  && i>0) [images[i-1],images[i]]=[images[i],images[i-1]];
+        if(act==='right' && i<images.length-1) [images[i+1],images[i]]=[images[i],images[i+1]];
+        if(act==='rotate') rotateItem(item);
+        if(act!=='rotate') render();
+      });
+      gallery.appendChild(card);
+    });
+  }
+
+  function rotateItem(item){
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.height; c.height = img.width;
+      const ctx = c.getContext('2d');
+      ctx.translate(c.width/2, c.height/2);
+      ctx.rotate(Math.PI/2);
+      ctx.drawImage(img, -img.width/2, -img.height/2);
+      item.dataUrl = c.toDataURL('image/jpeg', .92);
+      [item.width, item.height] = [item.height, item.width];
+      render();
+    };
+    img.src = item.dataUrl;
+  }
+
+  /* ---------- 生成 PDF ---------- */
+  btnExport.addEventListener('click', async () => {
+    if(!images.length) return;
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+
+    btnExport.disabled = true;
+    progWrap.style.display = 'block';
+
+    const pdf = new jsPDF({ unit:'mm', format:'a4', compress:true });
+
+    for(let i=0; i<images.length; i++){
+      const item = images[i];
+      progText.textContent = `处理中 ${i+1} / ${images.length} — ${item.name}`;
+      progBar.style.width = ((i / images.length) * 100) + '%';
+      await new Promise(r => setTimeout(r, 20)); // 让 UI 更新
+
+      if(i > 0) pdf.addPage();
+
+      // 统一转 JPEG，控制 PDF 体积
+      const { dataUrl, w, h } = await normalize(item);
+
+      if(mode === 'stretch'){
+        // 强制拉伸铺满整页 A4（可变形）
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, A4_W, A4_H);
+      } else {
+        // 等比缩放留白，居中
+        const scale = Math.min(A4_W/w, A4_H/h);
+        const dw = w*scale, dh = h*scale;
+        pdf.addImage(dataUrl, 'JPEG', (A4_W-dw)/2, (A4_H-dh)/2, dw, dh);
+      }
+    }
+
+    progBar.style.width = '100%';
+    progText.textContent = '完成，正在下载…';
+    pdf.save('images-A4.pdf');
+
+    setTimeout(() => {
+      progWrap.style.display = 'none';
+      progBar.style.width = '0%';
+      btnExport.disabled = false;
+    }, 800);
+  });
+
+  // 将超大图片压到 2480px 内并转 JPEG，避免 PDF 过大
+  function normalize(item){
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 2480;
+        let { width:w, height:h } = img;
+        const ratio = Math.min(1, MAX / Math.max(w,h));
+        w = Math.round(w*ratio); h = Math.round(h*ratio);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0,0,w,h);
+        ctx.drawImage(img,0,0,w,h);
+        resolve({ dataUrl: c.toDataURL('image/jpeg', .9), w, h });
+      };
+      img.src = item.dataUrl;
+    });
+  }
+})();
+</script>
+</body>
+</html>
